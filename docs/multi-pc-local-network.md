@@ -32,18 +32,18 @@ pip install -r requirements.txt -r requirements-demo.txt
 
 ## Paso 1 — PC-A: arrancar bitcoind
 
+Solo levantamos el servicio `bitcoind` del compose. Los participantes
+corren directamente en cada PC — sin contenedor.
+
 ```bash
-docker run -d --name bitcoind \
-  -p 18443:18443 \
-  -v ./config/bitcoin-docker.conf:/home/bitcoin/.bitcoin/bitcoin.conf:ro \
-  ruimarinho/bitcoin-core:26.0
+make bitcoind
+# equivalente: docker compose up bitcoind
 ```
 
 Verificar que está listo:
 
 ```bash
-docker exec bitcoind bitcoin-cli -regtest \
-  -rpcuser=user -rpcpassword=password getblockchaininfo
+docker compose exec bitcoind bitcoin-cli -datadir=/data/.bitcoin getblockchaininfo
 ```
 
 ---

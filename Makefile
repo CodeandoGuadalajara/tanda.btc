@@ -1,7 +1,11 @@
-.PHONY: demo demo-down demo-logs test test-e2e
+.PHONY: demo demo-down demo-logs bitcoind test test-e2e
 
 demo:
 	docker compose up --build
+
+# Multi-PC: levanta solo bitcoind en PC-A (los participantes corren en sus propias máquinas)
+bitcoind:
+	docker compose up bitcoind
 
 demo-down:
 	docker compose down -v
