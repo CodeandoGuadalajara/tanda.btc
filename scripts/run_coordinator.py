@@ -18,10 +18,15 @@ from __future__ import annotations
 
 import os
 import sys
+
+# Allow running as `python scripts/run_coordinator.py` from the repo root
+# without needing PYTHONPATH to be set externally.
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import time
 import urllib.parse
 from io import BytesIO
 
+import hashlib
 import coincurve
 import httpx
 from embit.ec import PublicKey
@@ -63,9 +68,9 @@ K_MIN = 2
 BITCOIND_URL = os.environ.get("BITCOIND_RPC_URL", "http://user:password@bitcoind:18443")
 
 P_URLS = [
-    os.environ.get("P0_URL", "http://p0:8080"),
-    os.environ.get("P1_URL", "http://p1:8080"),
-    os.environ.get("P2_URL", "http://p2:8080"),
+    os.environ.get("P0_URL", "http://192.168.100.85:8080"),
+    os.environ.get("P1_URL", "http://192.168.100.61:8080"),
+    os.environ.get("P2_URL", "http://192.168.100.97:8082"),
 ]
 
 
@@ -194,24 +199,39 @@ def main() -> None:
     for i, h in enumerate(health):
         print(f"  P{i}: {h['pubkey_hex'][:24]}...", flush=True)
 
-    # ── 2. Bootstrap: coordinator wallet, mine 101 blocks, fund participants ───
+    # ── 2. Bootstrap: mine 101 blocks, fund participants (wallet-less) ─────────
     print("\n--- Bootstrap ---", flush=True)
-    base_rpc = _make_rpc(BITCOIND_URL)
-    base_rpc.create_wallet("coordinator")
 
-    coord_rpc = _make_rpc(BITCOIND_URL, wallet="coordinator")
-    coord_addr = coord_rpc.get_new_address()
+    coord_addr = rpc._default_mine_addr()
+    print("Mining 101 blocks to coordinator address...", flush=True)
+    rpc.mine(101, address=coord_addr)
 
-    print("Mining 101 blocks to coordinator wallet...", flush=True)
-    coord_rpc.mine(101, address=coord_addr)
+    # Derive WIF for the deterministic mining key (same seed as _default_mine_addr)
+    from embit.ec import PrivateKey as _PK
+    from embit.networks import NETWORKS as _NETS
+    _mine_wif = _PK(hashlib.sha256(b"regtest_mine_key").digest()).wif(network=_NETS["regtest"])
 
-    print("Funding participants (5 BTC each)...", flush=True)
+    print(f"Funding participants ({AMOUNT_BTC} BTC each)...", flush=True)
+    coinbases = rpc.scan_utxos(coord_addr)
+    if len(coinbases) < len(P_URLS):
+        raise RuntimeError(f"Expected {len(P_URLS)} coinbase UTXOs, found {len(coinbases)}")
+
     for i, url in enumerate(P_URLS):
         r = httpx.get(f"{url}/wallet_address", timeout=10)
+        if not r.content:
+            raise RuntimeError(f"P{i} ({url}) returned empty response for /wallet_address — check participant logs")
         wallet_addr = r.json()["address"]
-        coord_rpc.fund_address(wallet_addr, 5.0)
-        print(f"  Sent 5 BTC → P{i} ({wallet_addr[:24]}...)", flush=True)
-    coord_rpc.mine(1)  # confirm all funding txs
+        u = coinbases[i]
+        spk = u["scriptPubKey"] if isinstance(u["scriptPubKey"], str) else u["scriptPubKey"]["hex"]
+        rpc._fund_address_raw(wallet_addr, AMOUNT_BTC, [{
+            "txid": u["txid"], "vout": u["vout"],
+            "amount": float(u["amount"]),
+            "scriptPubKey": spk,
+            "privkey": _mine_wif,
+            "change_address": coord_addr,
+        }])
+        print(f"  Sent {AMOUNT_BTC} BTC → P{i} ({wallet_addr[:24]}...)", flush=True)
+    rpc.mine(1)  # confirm all funding txs
 
     # ── 3. Tanda setup ────────────────────────────────────────────────────────
     print("\n--- Tanda Setup ---", flush=True)

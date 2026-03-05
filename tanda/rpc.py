@@ -75,11 +75,12 @@ class BitcoinRPC:
         """
         if address is None:
             address = self._default_mine_addr()
-        rpc = self._conn()
-        try:
-            return rpc.generatetoaddress(n, address)
-        except JSONRPCException:
-            pass
+        # Try generatetoaddress on both wallet URL and base URL before wallet-less path
+        for url in dict.fromkeys([self._url, self._base_url]):
+            try:
+                return AuthServiceProxy(url).generatetoaddress(n, address)
+            except JSONRPCException:
+                pass
         # Wallet-less fallback
         block_hashes = []
         for _ in range(n):
@@ -110,7 +111,8 @@ class BitcoinRPC:
           4. bitcoin-util grind to solve PoW
           5. submitblock
         """
-        rpc = self._conn()
+        # Use the base URL (no /wallet/…) — getblocktemplate is a chain-level RPC
+        rpc = AuthServiceProxy(self._base_url)
         template = rpc.getblocktemplate({"rules": ["segwit"]})
 
         version = template["version"]
@@ -259,7 +261,7 @@ class BitcoinRPC:
         rpc = self._conn()
         try:
             return rpc.getnewaddress(label)
-        except JSONRPCException:
+        except Exception:
             # Wallet not available - generate deterministic address
             seed = hashlib.sha256(f"{label}_{self._wallet or 'default'}".encode()).digest()
             from embit.ec import PrivateKey
@@ -299,7 +301,9 @@ class BitcoinRPC:
         Build + sign + broadcast a funding transaction from given UTXOs.
         Each UTXO dict must have: txid, vout, amount (BTC), privkey (WIF or hex), scriptPubKey.
         """
-        rpc = self._conn()
+        # Use base URL — createrawtransaction / signrawtransactionwithkey / sendrawtransaction
+        # are chain-level RPCs and must not be called on a /wallet/<name> path.
+        rpc = AuthServiceProxy(self._base_url)
         amount_sats = round(amount_btc * 100_000_000)
 
         inputs = [{"txid": u["txid"], "vout": u["vout"]} for u in from_utxos]
