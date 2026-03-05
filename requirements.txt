@@ -1,0 +1,4 @@
+embit>=0.8.0
+python-bitcoinrpc>=1.0
+coincurve>=18.0.0
+pytest>=7.0.0
