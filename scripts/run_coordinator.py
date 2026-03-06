@@ -92,27 +92,29 @@ def _make_rpc(url: str, wallet: str | None = None) -> BitcoinRPC:
 
 def wait_bitcoind(rpc: BitcoinRPC, retries: int = 60) -> None:
     print("Waiting for bitcoind...", flush=True)
-    for _ in range(retries):
+    for i in range(retries):
         try:
-            rpc.get_block_height()
+            # Use a short timeout so a hang doesn't stall for 30 s per retry
+            AuthServiceProxy(rpc._base_url, timeout=5).getblockcount()
             print("  bitcoind ready", flush=True)
             return
-        except Exception:
+        except Exception as e:
+            print(f"  [{i+1}/{retries}] {type(e).__name__}: {e}", flush=True)
             time.sleep(1)
     raise RuntimeError("bitcoind not available after 60 s")
 
 
 def wait_participant(url: str, retries: int = 60) -> dict:
     print(f"Waiting for {url}...", flush=True)
-    for _ in range(retries):
+    for i in range(retries):
         try:
             r = httpx.get(f"{url}/health", timeout=5)
             if r.status_code == 200:
                 data = r.json()
                 print(f"  {url} ready  pubkey={data['pubkey_hex'][:16]}...", flush=True)
                 return data
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"  [{i+1}/{retries}] {type(e).__name__}: {e}", flush=True)
         time.sleep(1)
     raise RuntimeError(f"Participant {url} not available after 60 s")
 
@@ -221,7 +223,6 @@ def main() -> None:
         raise RuntimeError("No mature coinbases — mine more blocks first")
 
     # Collect all wallet addresses first
-    print(f"Funding participants ({AMOUNT_BTC} BTC each)...", flush=True)
     wallet_addrs = []
     for i, url in enumerate(P_URLS):
         r = httpx.get(f"{url}/wallet_address", timeout=10)
@@ -229,12 +230,18 @@ def main() -> None:
             raise RuntimeError(f"P{i} ({url}) vacío en /wallet_address — revisa logs del participante")
         wallet_addrs.append(r.json()["address"])
 
+    # Each participant needs enough for all N rounds plus the per-tx fee (0.0001)
+    # per-round actual fee is 5000 sats (0.00005) but the UTXO selector checks >= amount+0.0001
+    n_rounds = len(P_URLS)
+    fund_per_participant = round(n_rounds * AMOUNT_BTC + n_rounds * 0.0001, 8)
+    print(f"Funding participants ({fund_per_participant} BTC each = {n_rounds} rounds)...", flush=True)
+
     # Fund all participants in one transaction to avoid coinbase maturity issues
     u = mature[0]
     spk = u["scriptPubKey"] if isinstance(u["scriptPubKey"], str) else u["scriptPubKey"]["hex"]
     fee_btc = 0.0001
-    change_btc = round(float(u["amount"]) - AMOUNT_BTC * len(P_URLS) - fee_btc, 8)
-    outputs = {addr: AMOUNT_BTC for addr in wallet_addrs}
+    change_btc = round(float(u["amount"]) - fund_per_participant * len(P_URLS) - fee_btc, 8)
+    outputs = {addr: fund_per_participant for addr in wallet_addrs}
     if change_btc > 0.00000546:
         outputs[coord_addr] = change_btc
 
@@ -247,7 +254,7 @@ def main() -> None:
         raise RuntimeError(f"Funding tx signing incomplete: {signed}")
     base.sendrawtransaction(signed["hex"])
     for i, addr in enumerate(wallet_addrs):
-        print(f"  Sent {AMOUNT_BTC} BTC → P{i} ({addr[:24]}...)", flush=True)
+        print(f"  Sent {fund_per_participant} BTC → P{i} ({addr[:24]}...)", flush=True)
     rpc.mine(1)  # confirm funding tx
 
     # ── 3. Tanda setup ────────────────────────────────────────────────────────

@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import time
 import urllib.parse
 from io import BytesIO
 from typing import Optional
@@ -42,7 +41,24 @@ from .protocol import (
 )
 from .rpc import BitcoinRPC
 from embit.ec import PrivateKey
+from embit.script import Script
 from embit.transaction import Transaction
+
+
+# ── Wallet-less helpers ────────────────────────────────────────────────────────
+
+def _p2wpkh_addr(sk_bytes: bytes) -> str:
+    """P2WPKH address derived from tanda key — no RPC needed."""
+    pubkey = coincurve.PrivateKey(sk_bytes).public_key.format(compressed=True)
+    pk_hash = hashlib.new("ripemd160", hashlib.sha256(pubkey).digest()).digest()
+    spk = bytes([0x00, 0x14]) + pk_hash
+    return Script(spk).address(network=REGTEST)
+
+
+def _wif(sk_bytes: bytes) -> str:
+    """WIF (regtest) for the tanda key."""
+    from embit.networks import NETWORKS
+    return PrivateKey(sk_bytes).wif(network=NETWORKS["regtest"])
 
 
 app = FastAPI(title="Tanda Participant")
@@ -58,30 +74,13 @@ async def startup():
 
     rpc_url = os.environ.get("BITCOIND_RPC_URL", "http://user:password@bitcoind:18443")
     parsed = urllib.parse.urlparse(rpc_url)
-    wallet_name = f"wallet_p{idx}"
 
-    # Step 1: create wallet via base RPC (no wallet path — createwallet is node-level)
-    base_rpc = BitcoinRPC(
-        rpc_user=parsed.username,
-        rpc_password=parsed.password,
-        rpc_host=parsed.hostname,
-        rpc_port=parsed.port or 18443,
-    )
-    for attempt in range(30):
-        try:
-            base_rpc.create_wallet(wallet_name)
-            break
-        except Exception:
-            if attempt < 29:
-                time.sleep(1)
-
-    # Step 2: wallet-specific RPC for fund_address / get_new_address
+    # Wallet-less: use only chain-level RPC (no wallet creation)
     rpc = BitcoinRPC(
         rpc_user=parsed.username,
         rpc_password=parsed.password,
         rpc_host=parsed.hostname,
         rpc_port=parsed.port or 18443,
-        wallet=wallet_name,
     )
 
     pubkey = coincurve.PrivateKey(sk_bytes).public_key.format(compressed=True)
@@ -178,8 +177,7 @@ def health():
 
 @app.get("/wallet_address")
 def wallet_address():
-    addr = app.state.rpc.get_new_address()
-    return {"address": addr}
+    return {"address": _p2wpkh_addr(app.state.sk_bytes)}
 
 
 @app.post("/setup")
@@ -196,7 +194,29 @@ def setup(req: SetupRequest):
 
 @app.post("/contribute")
 def contribute(req: ContributeRequest):
-    txid = app.state.rpc.fund_address(req.address, req.amount_btc)
+    my_addr = _p2wpkh_addr(app.state.sk_bytes)
+    utxos = app.state.rpc.scan_utxos(my_addr)
+    if not utxos:
+        raise HTTPException(400, detail=f"No funds at {my_addr}")
+
+    fee = 0.0001
+    u = next((u for u in utxos if float(u["amount"]) >= req.amount_btc + fee), None)
+    if u is None:
+        raise HTTPException(400, detail="Insufficient funds")
+
+    spk_hex = (
+        u["scriptPubKey"]
+        if isinstance(u["scriptPubKey"], str)
+        else u["scriptPubKey"]["hex"]
+    )
+    txid = app.state.rpc._fund_address_raw(req.address, req.amount_btc, [{
+        "txid": u["txid"],
+        "vout": u["vout"],
+        "amount": float(u["amount"]),
+        "scriptPubKey": spk_hex,
+        "privkey": _wif(app.state.sk_bytes),
+        "change_address": my_addr,
+    }])
     return {"txid": txid}
 
 

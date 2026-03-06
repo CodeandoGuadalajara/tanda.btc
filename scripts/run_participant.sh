@@ -24,4 +24,8 @@ fi
 
 PORT="${PORT:-8080}"
 
+# Asegura que el paquete tanda sea importable desde el directorio del repo
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}${SCRIPT_DIR}/.."
+
 exec uvicorn tanda.api_participant:app --host 0.0.0.0 --port "$PORT"

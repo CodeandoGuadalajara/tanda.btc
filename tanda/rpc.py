@@ -63,6 +63,10 @@ class BitcoinRPC:
         """Return a (possibly reconnected) proxy."""
         return AuthServiceProxy(self._url)
 
+    def _chain(self) -> AuthServiceProxy:
+        """Chain-level endpoint — never uses /wallet/… path."""
+        return AuthServiceProxy(self._base_url)
+
     # ── Block management ──────────────────────────────────────────────────────
 
     def mine(self, n: int = 1, address: Optional[str] = None) -> list[str]:
@@ -239,7 +243,7 @@ class BitcoinRPC:
         return b"\xff" + struct.pack("<Q", n)
 
     def get_block_height(self) -> int:
-        return self._conn().getblockcount()
+        return self._chain().getblockcount()
 
     # ── Wallet / funds (wallet-less implementation) ───────────────────────────
 
@@ -361,26 +365,26 @@ class BitcoinRPC:
     # ── Transaction helpers ───────────────────────────────────────────────────
 
     def get_raw_transaction(self, txid: str, verbose: bool = True) -> dict:
-        return self._conn().getrawtransaction(txid, verbose)
+        return self._chain().getrawtransaction(txid, verbose)
 
     def decode_raw_transaction(self, hex_tx: str) -> dict:
-        return self._conn().decoderawtransaction(hex_tx)
+        return self._chain().decoderawtransaction(hex_tx)
 
     def send_raw_transaction(self, hex_tx: str) -> str:
         """Broadcast a raw hex transaction; returns txid."""
-        return self._conn().sendrawtransaction(hex_tx)
+        return self._chain().sendrawtransaction(hex_tx)
 
     def test_mempool_accept(self, hex_tx: str) -> list[dict]:
-        return self._conn().testmempoolaccept([hex_tx])
+        return self._chain().testmempoolaccept([hex_tx])
 
     def get_tx_out(self, txid: str, vout: int) -> Optional[dict]:
-        return self._conn().gettxout(txid, vout)
+        return self._chain().gettxout(txid, vout)
 
     # ── UTXO helpers ──────────────────────────────────────────────────────────
 
     def scan_utxos(self, address: str) -> list[dict]:
         """Return UTXOs for a given address (uses scantxoutset)."""
-        result = self._conn().scantxoutset("start", [f"addr({address})"])
+        result = self._chain().scantxoutset("start", [f"addr({address})"])
         return result.get("unspents", [])
 
     def get_utxos_for_address(self, address: str, min_conf: int = 1) -> list[dict]:
@@ -391,7 +395,7 @@ class BitcoinRPC:
 
     def estimate_fee_rate(self, target_blocks: int = 6) -> float:
         """Return estimated fee rate in BTC/kB (min 0.00001)."""
-        res = self._conn().estimatesmartfee(target_blocks)
+        res = self._chain().estimatesmartfee(target_blocks)
         return max(res.get("feerate", 0.00001), 0.00001)
 
     # ── Descriptor / address utilities ───────────────────────────────────────

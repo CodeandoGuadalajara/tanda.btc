@@ -85,6 +85,9 @@ services:
       - tanda-net
     environment:
       BITCOIND_RPC_URL: "http://user:password@bitcoind:18443"
+      P0_URL: "http://p0:8080"
+      P1_URL: "http://p1:8080"
+      P2_URL: "http://p2:8080"
       AMOUNT_BTC: "0.1"
       T_CLAIM: "5"
       T_REFUND: "10"
