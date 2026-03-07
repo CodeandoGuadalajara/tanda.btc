@@ -46,10 +46,13 @@ class BitcoinRPC:
         wallet: Optional[str] = None,
         data_dir: Optional[str] = None,
     ):
-        # Try cookie auth first, fall back to user/password
-        cookie = _read_cookie(data_dir)
-        if cookie:
-            rpc_user, rpc_password = cookie
+        # Cookie auth is only valid for a local bitcoind — skip it when connecting
+        # to a remote host, otherwise the local .cookie overrides valid credentials.
+        is_local = rpc_host in ("127.0.0.1", "localhost", "::1")
+        if is_local:
+            cookie = _read_cookie(data_dir)
+            if cookie:
+                rpc_user, rpc_password = cookie
 
         base_url = f"http://{rpc_user}:{rpc_password}@{rpc_host}:{rpc_port}"
         if wallet:
