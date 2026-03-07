@@ -209,14 +209,17 @@ def contribute(req: ContributeRequest):
         if isinstance(u["scriptPubKey"], str)
         else u["scriptPubKey"]["hex"]
     )
-    txid = app.state.rpc._fund_address_raw(req.address, req.amount_btc, [{
-        "txid": u["txid"],
-        "vout": u["vout"],
-        "amount": float(u["amount"]),
-        "scriptPubKey": spk_hex,
-        "privkey": _wif(app.state.sk_bytes),
-        "change_address": my_addr,
-    }])
+    try:
+        txid = app.state.rpc._fund_address_raw(req.address, req.amount_btc, [{
+            "txid": u["txid"],
+            "vout": u["vout"],
+            "amount": float(u["amount"]),
+            "scriptPubKey": spk_hex,
+            "privkey": _wif(app.state.sk_bytes),
+            "change_address": my_addr,
+        }])
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"fund_address_raw failed: {exc}")
     return {"txid": txid}
 
 

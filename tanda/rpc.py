@@ -383,9 +383,21 @@ class BitcoinRPC:
     # ── UTXO helpers ──────────────────────────────────────────────────────────
 
     def scan_utxos(self, address: str) -> list[dict]:
-        """Return UTXOs for a given address (uses scantxoutset)."""
-        result = self._chain().scantxoutset("start", [f"addr({address})"])
-        return result.get("unspents", [])
+        """Return UTXOs for a given address (uses scantxoutset).
+
+        Retries on 'scan already in progress' — multiple participants sharing
+        the same bitcoind node can trigger concurrent scans.
+        """
+        import time
+        for attempt in range(10):
+            try:
+                result = self._chain().scantxoutset("start", [f"addr({address})"])
+                return result.get("unspents", [])
+            except JSONRPCException as e:
+                if "scan already in progress" in str(e).lower() and attempt < 9:
+                    time.sleep(0.5 * (attempt + 1))
+                    continue
+                raise
 
     def get_utxos_for_address(self, address: str, min_conf: int = 1) -> list[dict]:
         """Return UTXOs sent to *address* via listunspent (wallet-aware)."""

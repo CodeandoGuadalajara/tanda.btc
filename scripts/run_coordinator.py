@@ -318,6 +318,8 @@ def run_round0_cooperative(rpc, setup, params, pubkeys):
         r = httpx.post(f"{url}/contribute",
                        json={"address": address, "amount_btc": AMOUNT_BTC},
                        timeout=30)
+        if not r.is_success:
+            print(f"    P{i} ERROR {r.status_code}: {r.text}", flush=True)
         r.raise_for_status()
         print(f"    P{i} txid={r.json()['txid'][:16]}...", flush=True)
     rpc.mine(1)
@@ -388,6 +390,8 @@ def run_round1_htlc(rpc, setup, params, pubkeys):
         r = httpx.post(f"{url}/contribute",
                        json={"address": address, "amount_btc": AMOUNT_BTC},
                        timeout=30)
+        if not r.is_success:
+            print(f"    P{i} ERROR {r.status_code}: {r.text}", flush=True)
         r.raise_for_status()
         print(f"    P{i} txid={r.json()['txid'][:16]}...", flush=True)
     rpc.mine(1)
@@ -443,6 +447,8 @@ def run_round2_refund(rpc, setup, params, pubkeys):
         r = httpx.post(f"{url}/contribute",
                        json={"address": address, "amount_btc": AMOUNT_BTC},
                        timeout=30)
+        if not r.is_success:
+            print(f"    P{i} ERROR {r.status_code}: {r.text}", flush=True)
         r.raise_for_status()
         print(f"    P{i} txid={r.json()['txid'][:16]}...", flush=True)
     rpc.mine(1)
