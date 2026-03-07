@@ -259,21 +259,22 @@ def main() -> None:
 
     # ── 3. Tanda setup ────────────────────────────────────────────────────────
     print("\n--- Tanda Setup ---", flush=True)
+    n = len(pubkeys)
     params = TandaParams(
-        n_participants=3,
+        n_participants=n,
         amount_btc=AMOUNT_BTC,
         t_contribution=3,
         t_claim=T_CLAIM,
         t_refund=T_REFUND,
-        k_min=K_MIN,
-        winner_order=[0, 1, 2],
+        k_min=min(K_MIN, n),
+        winner_order=list(range(n)),
     )
     coord = Coordinator(rpc, params, pubkeys)
     setup = coord.setup()
 
     # Distribute per-round parameters to participants.
     # The round winner additionally receives their HTLC preimage.
-    for k in range(3):
+    for k in range(n):
         rs = setup.rounds[k]
         winner_idx = params.winner_order[k]
         base_payload = {
@@ -290,19 +291,24 @@ def main() -> None:
             httpx.post(f"{url}/setup", json=payload, timeout=10)
     print("Setup distributed to all participants.", flush=True)
 
-    # ── Round 0 ────────────────────────────────────────────────────────────────
+    # ── Round 0: always cooperative ───────────────────────────────────────────
     print("\n=== Round 0: Cooperative MuSig2 (P0 wins) ===", flush=True)
     run_round0_cooperative(rpc, setup, params, pubkeys)
 
-    # ── Round 1 ────────────────────────────────────────────────────────────────
-    print("\n=== Round 1: HTLC fallback (P1 wins, P0 refuses) ===", flush=True)
-    run_round1_htlc(rpc, setup, params, pubkeys)
+    if n >= 3:
+        # ── Round 1: HTLC fallback (needs at least 3 participants) ────────────
+        print("\n=== Round 1: HTLC fallback (P1 wins, P0 refuses) ===", flush=True)
+        run_round1_htlc(rpc, setup, params, pubkeys)
 
-    # ── Round 2 ────────────────────────────────────────────────────────────────
-    print("\n=== Round 2: Collective refund (P2 disappears) ===", flush=True)
-    run_round2_refund(rpc, setup, params, pubkeys)
+        # ── Round 2: collective refund ────────────────────────────────────────
+        print("\n=== Round 2: Collective refund (P2 disappears) ===", flush=True)
+        run_round2_refund(rpc, setup, params, pubkeys)
+    else:
+        # ── Round 1 (2-participant): HTLC fallback (P1 wins) ──────────────────
+        print(f"\n=== Round 1: HTLC fallback (P{n-1} wins, P0 refuses) ===", flush=True)
+        run_round1_htlc(rpc, setup, params, pubkeys)
 
-    print("\n✓ All 3 rounds complete.", flush=True)
+    print(f"\n✓ All {n} rounds complete.", flush=True)
 
 
 # ── Round 0: cooperative keypath spend ────────────────────────────────────────
@@ -324,7 +330,7 @@ def run_round0_cooperative(rpc, setup, params, pubkeys):
         print(f"    P{i} txid={r.json()['txid'][:16]}...", flush=True)
     rpc.mine(1)
 
-    utxos = scan_utxos(rpc, address, 3, btc_to_sats(AMOUNT_BTC), spk)
+    utxos = scan_utxos(rpc, address, len(P_URLS), btc_to_sats(AMOUNT_BTC), spk)
     for i, u in enumerate(utxos):
         rs.contributions[i] = u
 
@@ -396,7 +402,7 @@ def run_round1_htlc(rpc, setup, params, pubkeys):
         print(f"    P{i} txid={r.json()['txid'][:16]}...", flush=True)
     rpc.mine(1)
 
-    utxos = scan_utxos(rpc, address, 3, btc_to_sats(AMOUNT_BTC), spk)
+    utxos = scan_utxos(rpc, address, len(P_URLS), btc_to_sats(AMOUNT_BTC), spk)
     for i, u in enumerate(utxos):
         rs.contributions[i] = u
 
@@ -453,7 +459,7 @@ def run_round2_refund(rpc, setup, params, pubkeys):
         print(f"    P{i} txid={r.json()['txid'][:16]}...", flush=True)
     rpc.mine(1)
 
-    utxos = scan_utxos(rpc, address, 3, btc_to_sats(AMOUNT_BTC), spk)
+    utxos = scan_utxos(rpc, address, len(P_URLS), btc_to_sats(AMOUNT_BTC), spk)
     for i, u in enumerate(utxos):
         rs.contributions[i] = u
 
