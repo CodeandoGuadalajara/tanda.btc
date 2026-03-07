@@ -17,7 +17,7 @@ colores = ['#2ca02c', '#1f77b4', '#9467bd', '#ff7f0e', '#d62728']
 # ────────────────────────────────────────────────
 # Figura con dos subgráficas
 # ────────────────────────────────────────────────
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(11, 9), sharex=False)
+fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(11, 13), sharex=False)
 
 # ────────────────────────────────────────────────
 # Gráfica 1: Tanda - Saldo neto acumulado por turno
@@ -89,6 +89,53 @@ ax2.legend(loc='lower left', fontsize=10,
            handlelength=1.5, handletextpad=0.5)
 ax2.set_ylim(0, valor_nominal * 1.15)
 ax2.set_xlim(10.5, -0.5)
+
+# ────────────────────────────────────────────────
+# Gráfica 3: Serie de bonos cupón cero en sats
+#   Ganador n recibe el pozo y compra un bono a n años
+# ────────────────────────────────────────────────
+valor_nominal_sats = 1_000_000          # pozo en sats = 1 M sats
+tasa_btc = 0.008                        # inflación protocolo BTC ~0.8% anual
+
+cmap = plt.get_cmap('plasma', n_personas)
+
+ax3.set_title(
+    f'Tanda-bono: {n_personas} ganadores, cada uno compra un cupón cero a n años\n'
+    f'Valor nominal {valor_nominal_sats:,} sats – tasa {tasa_btc*100:.1f}% anual (inflación BTC)',
+    fontsize=14, fontweight='bold')
+ax3.set_xlabel('Años restantes hasta vencimiento', fontsize=12)
+ax3.set_ylabel('Valor presente (sats)', fontsize=12)
+ax3.grid(True, alpha=0.3, linestyle='--')
+
+for n in range(1, n_personas + 1):
+    # Curva desde t_restante = n hasta 0 (el ganador n compra en el año n)
+    t = np.linspace(n, 0, n * 50 + 1)
+    precio = valor_nominal_sats / (1 + tasa_btc) ** t
+    color = cmap(n - 1)
+
+    ax3.plot(t, precio, color=color, linewidth=2.2, label=f'Turno {n}')
+
+    # Punto de compra (inicio del bono)
+    precio_compra = valor_nominal_sats / (1 + tasa_btc) ** n
+    ax3.plot(n, precio_compra, 'o', color=color, markersize=7, zorder=5)
+
+    # Etiqueta con el precio de compra al lado del punto inicial
+    offset_y = 1_500 if n % 2 == 0 else -3_500
+    ax3.annotate(f'{precio_compra:,.0f}',
+                 xy=(n, precio_compra), xytext=(n + 0.1, precio_compra + offset_y),
+                 fontsize=7, color='black', va='center', zorder=10,
+                 bbox=dict(boxstyle='round,pad=0.15', fc='white', ec='none', alpha=0.7))
+
+# Línea de nominal y vencimiento
+ax3.axhline(valor_nominal_sats, color='gray', linestyle='--', alpha=0.5,
+            label=f'Nominal {valor_nominal_sats:,} sats')
+ax3.plot(0, valor_nominal_sats, 'k^', markersize=10, zorder=6, label='Vencimiento')
+
+ax3.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{int(x):,}'))
+ax3.legend(loc='upper left', fontsize=8, ncol=2,
+           handlelength=1.2, handletextpad=0.4, columnspacing=0.8)
+ax3.set_ylim(valor_nominal_sats * 0.915, valor_nominal_sats * 1.025)
+ax3.set_xlim(10.5, -0.5)
 
 plt.tight_layout()
 plt.show()

@@ -66,12 +66,12 @@ T_CLAIM = int(os.environ.get("T_CLAIM", "5"))
 T_REFUND = int(os.environ.get("T_REFUND", "10"))
 K_MIN = 2
 
-BITCOIND_URL = os.environ.get("BITCOIND_RPC_URL", "http://user:password@bitcoind:18443")
+BITCOIND_URL = os.environ.get("BITCOIND_RPC_URL", "http://user:password@localhost:18443")
 
 P_URLS = [
     os.environ.get("P0_URL", "http://192.168.100.85:8080"),
-    os.environ.get("P1_URL", "http://192.168.100.61:8080"),
-    os.environ.get("P2_URL", "http://192.168.100.97:8082"),
+    os.environ.get("P1_URL", "http://192.168.100.23:8080"),
+    os.environ.get("P2_URL", "http://192.168.100.37:8080"),
 ]
 
 

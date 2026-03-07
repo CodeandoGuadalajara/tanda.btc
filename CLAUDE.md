@@ -18,11 +18,17 @@ python -m pytest tests/test_protocol.py tests/test_coordinator.py -v
 # Single unit test class
 python -m pytest tests/test_protocol.py::TestMuSig2 -v
 
+# Single e2e test class
+python -m pytest tests/test_e2e_regtest.py::TestRound0Cooperative -v -s
+
 # E2E regtest tests — requires a running Bitcoin Core node
 python -m pytest tests/test_e2e_regtest.py -v -s
 
 # Start the regtest node (idempotent)
 bash scripts/regtest_setup.sh
+
+# Stop the regtest node
+bitcoin-cli -regtest stop
 ```
 
 Bitcoin Core is compiled **without wallet support**. Mining uses `getblocktemplate + bitcoin-util grind + submitblock`. UTXO discovery uses `scantxoutset`.
@@ -44,7 +50,20 @@ tests/
   test_e2e_regtest.py   — Full regtest integration: Round0 (cooperative), Round1 (HTLC), Round2 (refund)
 
 scripts/
-  regtest_setup.sh — Start bitcoind regtest, create wallets, mine initial blocks
+  regtest_setup.sh — Start bitcoind regtest, mine initial blocks
+```
+
+### Module import layering
+
+Modules only import downward — never create circular imports:
+
+```
+rpc.py          ← no tanda imports
+htlc.py         ← no tanda imports
+musig2.py       ← no tanda imports
+protocol.py     ← imports musig2
+coordinator.py  ← imports protocol, musig2, htlc, rpc
+participant.py  ← imports protocol, musig2, htlc, rpc
 ```
 
 ### Taproot output structure (per round)
@@ -101,3 +120,38 @@ When the tweaked output key Q has odd y, **both** the signing key parity and the
 ### embit txid byte order
 
 embit's `write_to()` reverses txid bytes internally. Pass display-order txid hex strings directly to `UTXO(txid=...)` without manual byte-reversal.
+
+## Common pitfalls when writing tests
+
+### Multi-input transactions: sign each input separately
+
+BIP-341 sighash includes `input_index`. Always loop with fresh nonces per input:
+
+```python
+for inp_idx in range(len(tx.vin)):
+    sighash = compute_taproot_sighash(tx, inp_idx, utxos, ...)
+    # generate fresh nonces here, sign, attach witness
+    tx.vin[inp_idx].witness = ...
+```
+
+### Manually constructing KeyAggContext in tests
+
+When building a `KeyAggContext` outside of `coordinator.setup()`, apply the Taproot tweak manually:
+
+```python
+from tanda.musig2 import key_agg, apply_tweak
+from tanda.protocol import taproot_tweak
+kac = key_agg(pubkeys)
+kac = apply_tweak(kac, taproot_tweak(scripts.internal_key_xonly, scripts.merkle_root), is_xonly=True)
+assert kac.agg_pk == scripts.output_key_xonly
+```
+
+### pytest e2e mark warning
+
+The `@pytest.mark.e2e` mark produces an `Unknown mark` warning. Suppress by adding to `pytest.ini`:
+
+```ini
+[pytest]
+markers =
+    e2e: end-to-end tests requiring a live regtest node
+```
