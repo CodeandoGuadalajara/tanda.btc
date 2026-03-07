@@ -236,19 +236,34 @@ def main() -> None:
     fund_per_participant = round(n_rounds * AMOUNT_BTC + n_rounds * 0.0001, 8)
     print(f"Funding participants ({fund_per_participant} BTC each = {n_rounds} rounds)...", flush=True)
 
-    # Fund all participants in one transaction to avoid coinbase maturity issues
-    u = mature[0]
-    spk = u["scriptPubKey"] if isinstance(u["scriptPubKey"], str) else u["scriptPubKey"]["hex"]
+    # Fund all participants in one transaction — accumulate enough mature UTXOs
+    # (coinbase rewards decay with halvings; may need several to cover total_needed)
     fee_btc = 0.0001
-    change_btc = round(float(u["amount"]) - fund_per_participant * len(P_URLS) - fee_btc, 8)
+    total_needed = fund_per_participant * len(P_URLS) + fee_btc
+    selected, total_in = [], 0.0
+    for u in mature:
+        selected.append(u)
+        total_in += float(u["amount"])
+        if total_in >= total_needed:
+            break
+    if total_in < total_needed:
+        raise RuntimeError(
+            f"Insufficient mature coinbases: have {total_in:.8f} BTC, "
+            f"need {total_needed:.8f} BTC — mine more blocks"
+        )
+
+    change_btc = round(total_in - fund_per_participant * len(P_URLS) - fee_btc, 8)
     outputs = {addr: fund_per_participant for addr in wallet_addrs}
     if change_btc > 0.00000546:
         outputs[coord_addr] = change_btc
 
     base = AuthServiceProxy(rpc._base_url)
-    raw_tx = base.createrawtransaction([{"txid": u["txid"], "vout": u["vout"]}], outputs)
-    prevtxs = [{"txid": u["txid"], "vout": u["vout"], "scriptPubKey": spk,
-                "amount": float(u["amount"])}]
+    inputs  = [{"txid": u["txid"], "vout": u["vout"]} for u in selected]
+    prevtxs = [{"txid": u["txid"], "vout": u["vout"],
+                "scriptPubKey": u["scriptPubKey"] if isinstance(u["scriptPubKey"], str)
+                                else u["scriptPubKey"]["hex"],
+                "amount": float(u["amount"])} for u in selected]
+    raw_tx = base.createrawtransaction(inputs, outputs)
     signed = base.signrawtransactionwithkey(raw_tx, [_mine_wif], prevtxs)
     if not signed.get("complete"):
         raise RuntimeError(f"Funding tx signing incomplete: {signed}")
