@@ -136,3 +136,5 @@ pip install -r requirements-demo.txt     # FastAPI + httpx + pyln-client
 - **BIP-342 CHECKSIGADD for refund multisig** — efficient Tapscript threshold with explicit absent-signer slots (`b""`)
 - **Per-input sighash** — BIP-341 commits to `input_index`; multi-input transactions require fresh nonces and separate signatures per input
 - **Hold invoices for LN rounds** — HTLC-based commitment prevents coordinator from paying winner before collecting from all participants
+- **Star topology with push_msat** — coordinator opens all channels and pushes 150k sats of outbound liquidity to each participant; no participant-to-participant channels needed
+- **CLN + BoltzExchange/hold plugin** — hold invoices are not part of the BOLT spec; the hold plugin exposes `holdinvoice` / `settleholdinvoice` / `cancelholdinvoice` as CLN commands
