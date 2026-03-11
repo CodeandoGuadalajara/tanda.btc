@@ -1,33 +1,37 @@
-# Una sola máquina: demo completo Lightning Network
-#
-# Uso:
-#   docker compose up --build
-#   INTERACTIVE=1 docker compose run --rm -it coordinator
-#
-# Para el demo multi-PC (varias máquinas en red local) ver deploy/
-
 networks:
-  tanda-ln-net:
+  tanda-ln-test-net:
     driver: bridge
 
 volumes:
-  bitcoind-data:
-  cln-coordinator-data:
-  cln-p0-data:
-  cln-p1-data:
-  cln-p2-data:
+  bitcoind-data-test:
+  cln-coordinator-data-test:
+  cln-p0-data-test:
+  cln-p1-data-test:
+  cln-p2-data-test:
+
+# Usage:
+#   docker compose -f docker-compose.test.yml up --build --exit-code-from test-runner
+#
+# The test-runner service replaces the demo coordinator: it runs pytest against
+# the live CLN stack and exits 0 on success, 1 on failure.
+#
+# CLN nodes wipe their regtest/ database on every container start so the stack
+# is always in a clean, consistent state regardless of previous runs.
+# Bitcoind keeps its blockchain (persistent volume) so blocks aren't re-mined.
+#
+# NOTE: the elementsproject/lightningd image has an entrypoint script that
+# calls `lightningd --network=... "$@"`.  We override the entrypoint with
+# ["sh", "-c"] so we can wipe stale state before starting lightningd.
 
 services:
   # ── Bitcoin Core ─────────────────────────────────────────────────────────────
   bitcoind:
     image: lncm/bitcoind:v27.0
     networks:
-      - tanda-ln-net
+      - tanda-ln-test-net
     volumes:
-      - bitcoind-data:/data/.bitcoin
+      - bitcoind-data-test:/data/.bitcoin
       - ./config/bitcoin-docker.conf:/data/.bitcoin/bitcoin.conf:ro
-    ports:
-      - "18443:18443"
     healthcheck:
       test: ["CMD", "bitcoin-cli", "-datadir=/data/.bitcoin", "getblockchaininfo"]
       interval: 5s
@@ -35,20 +39,19 @@ services:
       retries: 12
       start_period: 10s
 
-  # ── CLN coordinator node ──────────────────────────────────────────────────────
+  # ── CLN nodes ─────────────────────────────────────────────────────────────────
+  # Each CLN node wipes its regtest/ subdirectory on startup so it always starts
+  # from block 0, matching bitcoind even if the volume carried stale state.
   cln-coordinator:
     build:
       context: .
       dockerfile: Dockerfile.cln
-    image: cln-tanda
+    image: cln-tanda-test
     networks:
-      - tanda-ln-net
+      - tanda-ln-test-net
     volumes:
-      - cln-coordinator-data:/data
+      - cln-coordinator-data-test:/data
       - ./configs/cln-coordinator.conf:/etc/cln-coordinator.conf:ro
-    ports:
-      - "9736:9735"
-      - "3010:3010"
     entrypoint: ["sh", "-c"]
     command:
       - "rm -rf /data/regtest && exec lightningd --lightning-dir=/data --conf=/etc/cln-coordinator.conf"
@@ -62,16 +65,15 @@ services:
       retries: 24
       start_period: 20s
 
-  # ── CLN participant nodes ─────────────────────────────────────────────────────
   cln-p0:
     build:
       context: .
       dockerfile: Dockerfile.cln
-    image: cln-tanda
+    image: cln-tanda-test
     networks:
-      - tanda-ln-net
+      - tanda-ln-test-net
     volumes:
-      - cln-p0-data:/data
+      - cln-p0-data-test:/data
       - ./configs/cln-participant.conf:/etc/cln-participant.conf:ro
     entrypoint: ["sh", "-c"]
     command:
@@ -90,11 +92,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.cln
-    image: cln-tanda
+    image: cln-tanda-test
     networks:
-      - tanda-ln-net
+      - tanda-ln-test-net
     volumes:
-      - cln-p1-data:/data
+      - cln-p1-data-test:/data
       - ./configs/cln-participant.conf:/etc/cln-participant.conf:ro
     entrypoint: ["sh", "-c"]
     command:
@@ -113,11 +115,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.cln
-    image: cln-tanda
+    image: cln-tanda-test
     networks:
-      - tanda-ln-net
+      - tanda-ln-test-net
     volumes:
-      - cln-p2-data:/data
+      - cln-p2-data-test:/data
       - ./configs/cln-participant.conf:/etc/cln-participant.conf:ro
     entrypoint: ["sh", "-c"]
     command:
@@ -136,11 +138,11 @@ services:
   participant-p0:
     build: .
     networks:
-      - tanda-ln-net
+      - tanda-ln-test-net
     environment:
       CLN_RPC_PATH: /cln-data/regtest/lightning-rpc
     volumes:
-      - cln-p0-data:/cln-data
+      - cln-p0-data-test:/cln-data
     command: uvicorn tanda.api_participant_ln:app --host 0.0.0.0 --port 8080
     depends_on:
       cln-p0:
@@ -156,11 +158,11 @@ services:
   participant-p1:
     build: .
     networks:
-      - tanda-ln-net
+      - tanda-ln-test-net
     environment:
       CLN_RPC_PATH: /cln-data/regtest/lightning-rpc
     volumes:
-      - cln-p1-data:/cln-data
+      - cln-p1-data-test:/cln-data
     command: uvicorn tanda.api_participant_ln:app --host 0.0.0.0 --port 8080
     depends_on:
       cln-p1:
@@ -176,11 +178,11 @@ services:
   participant-p2:
     build: .
     networks:
-      - tanda-ln-net
+      - tanda-ln-test-net
     environment:
       CLN_RPC_PATH: /cln-data/regtest/lightning-rpc
     volumes:
-      - cln-p2-data:/cln-data
+      - cln-p2-data-test:/cln-data
     command: uvicorn tanda.api_participant_ln:app --host 0.0.0.0 --port 8080
     depends_on:
       cln-p2:
@@ -193,14 +195,11 @@ services:
       retries: 12
       start_period: 20s
 
-  # ── Coordinator demo script ───────────────────────────────────────────────────
-  coordinator:
+  # ── Test runner ───────────────────────────────────────────────────────────────
+  test-runner:
     build: .
-    profiles: [coordinator]
-    stdin_open: true
-    tty: true
     networks:
-      - tanda-ln-net
+      - tanda-ln-test-net
     environment:
       BITCOIND_RPC_URL: "http://user:password@bitcoind:18443"
       CLN_COORDINATOR_RPC: /cln/coordinator/regtest/lightning-rpc
@@ -217,14 +216,14 @@ services:
       P1_CLN_P2P_PORT: "9735"
       P2_CLN_P2P_PORT: "9735"
       CONTRIBUTION_SATS: "10000"
-      INTERACTIVE: "${INTERACTIVE:-0}"
-      ROUND: "${ROUND:-}"
     volumes:
-      - cln-coordinator-data:/cln/coordinator
-      - cln-p0-data:/cln/p0
-      - cln-p1-data:/cln/p1
-      - cln-p2-data:/cln/p2
-    command: python scripts/run_coordinator_ln.py
+      - cln-coordinator-data-test:/cln/coordinator
+      - cln-p0-data-test:/cln/p0
+      - cln-p1-data-test:/cln/p1
+      - cln-p2-data-test:/cln/p2
+    command: >
+      python -m pytest tests/test_e2e_ln_docker.py -v -s
+      --tb=short --no-header
     depends_on:
       bitcoind:
         condition: service_healthy

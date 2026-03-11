@@ -1,0 +1,69 @@
+# PC participante: CLN node + API FastAPI
+#
+# Uso en cada PC participante:
+#   BITCOIND_HOST=192.168.1.10 docker compose -f deploy/participant.yml up --build -d
+#
+# Variables de entorno:
+#   BITCOIND_HOST  — IP del PC-Coord donde corre bitcoind  (default: 192.168.1.10)
+#   BITCOIND_PORT  — Puerto RPC de bitcoind               (default: 18443)
+#   CLN_P2P_PORT   — Puerto P2P del nodo CLN              (default: 9735)
+#   API_PORT       — Puerto HTTP de la API FastAPI         (default: 8080)
+
+networks:
+  tanda-p-net:
+    driver: bridge
+
+volumes:
+  cln-p-data:
+
+services:
+  # ── CLN participante ──────────────────────────────────────────────────────────
+  cln-participant:
+    build:
+      context: ..
+      dockerfile: Dockerfile.cln
+    image: cln-tanda
+    networks:
+      - tanda-p-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # resuelve en Linux (Mac/Win ya lo tienen)
+    volumes:
+      - cln-p-data:/data
+      - ../configs/cln-participant.conf:/etc/cln-participant.conf:ro
+    environment:
+      BITCOIND_HOST: ${BITCOIND_HOST:-192.168.1.10}
+      BITCOIND_PORT: ${BITCOIND_PORT:-18443}
+    ports:
+      - "${CLN_P2P_PORT:-9735}:9735"   # P2P Lightning (el coordinador abre canal hacia aquí)
+    entrypoint: ["sh", "-c"]
+    command:
+      - "rm -rf /data/regtest && exec lightningd --lightning-dir=/data --conf=/etc/cln-participant.conf --bitcoin-rpcconnect=${BITCOIND_HOST:-192.168.1.10} --bitcoin-rpcport=${BITCOIND_PORT:-18443}"
+    healthcheck:
+      test: ["CMD", "lightning-cli", "--lightning-dir=/data", "--network=regtest", "getinfo"]
+      interval: 5s
+      timeout: 10s
+      retries: 24
+      start_period: 20s
+
+  # ── FastAPI participante ──────────────────────────────────────────────────────
+  participant-api:
+    build: ..
+    networks:
+      - tanda-p-net
+    environment:
+      CLN_RPC_PATH: /cln-data/regtest/lightning-rpc
+    volumes:
+      - cln-p-data:/cln-data
+    ports:
+      - "${API_PORT:-8080}:8080"        # HTTP API (el coordinador hace POST aquí)
+    command: uvicorn tanda.api_participant_ln:app --host 0.0.0.0 --port 8080
+    depends_on:
+      cln-participant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 5s
+      timeout: 10s
+      retries: 12
+      start_period: 20s

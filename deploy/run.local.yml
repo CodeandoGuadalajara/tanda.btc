@@ -1,0 +1,14 @@
+# Override para Linux: añade extra_hosts para que el coordinator container
+# pueda alcanzar APIs de participantes expuestas en el host (0.0.0.0:8080+).
+#
+# Uso (via scripts/test_local_multipc.sh):
+#   docker compose \
+#     -f deploy/coord.yml \
+#     -f deploy/run.yml \
+#     -f deploy/run.local.yml \
+#     up coordinator
+
+services:
+  coordinator:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

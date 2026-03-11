@@ -1,0 +1,60 @@
+# PC-Coord: bitcoind + CLN coordinador
+#
+# Uso:
+#   docker compose -f deploy/coord.yml up --build -d
+#
+# Este compose corre SOLO en la máquina del coordinador.
+# Los participantes usan deploy/participant.yml en sus propias PCs.
+
+networks:
+  tanda-coord-net:
+    driver: bridge
+
+volumes:
+  bitcoind-data-coord:
+  cln-coordinator-data-coord:
+
+services:
+  # ── Bitcoin Core ──────────────────────────────────────────────────────────────
+  bitcoind:
+    image: lncm/bitcoind:v27.0
+    networks:
+      - tanda-coord-net
+    volumes:
+      - bitcoind-data-coord:/data/.bitcoin
+      - ../config/bitcoin-docker.conf:/data/.bitcoin/bitcoin.conf:ro
+    ports:
+      - "18443:18443"    # RPC accesible desde el resto de la LAN
+    healthcheck:
+      test: ["CMD", "bitcoin-cli", "-datadir=/data/.bitcoin", "getblockchaininfo"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  # ── CLN coordinador ───────────────────────────────────────────────────────────
+  cln-coordinator:
+    build:
+      context: ..
+      dockerfile: Dockerfile.cln
+    image: cln-tanda
+    networks:
+      - tanda-coord-net
+    volumes:
+      - cln-coordinator-data-coord:/data
+      - ../configs/cln-coordinator.conf:/etc/cln-coordinator.conf:ro
+    ports:
+      - "9735:9735"     # P2P Lightning (participantes remotos conectan aquí)
+      - "3010:3010"     # CLNRest HTTP (opcional)
+    entrypoint: ["sh", "-c"]
+    command:
+      - "rm -rf /data/regtest && exec lightningd --lightning-dir=/data --conf=/etc/cln-coordinator.conf"
+    depends_on:
+      bitcoind:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "lightning-cli", "--lightning-dir=/data", "--network=regtest", "getinfo"]
+      interval: 5s
+      timeout: 10s
+      retries: 24
+      start_period: 20s

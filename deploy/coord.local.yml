@@ -1,0 +1,13 @@
+# Override para Linux: añade extra_hosts para que cln-coordinator pueda
+# resolver host.docker.internal y abrir canales P2P a participantes locales.
+#
+# Uso (via scripts/test_local_multipc.sh):
+#   docker compose \
+#     -f deploy/coord.yml \
+#     -f deploy/coord.local.yml \
+#     up --build -d
+
+services:
+  cln-coordinator:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
