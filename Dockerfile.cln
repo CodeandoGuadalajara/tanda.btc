@@ -5,10 +5,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     rm -rf /var/lib/apt/lists/*
 
 # Download pre-compiled hold plugin binary (BoltzExchange/hold).
-# The tar contains: build/hold-linux-amd64
+# Selects amd64 or arm64 based on the build platform automatically.
 ARG HOLD_VERSION=0.3.3
-RUN curl -fsSL \
-    "https://github.com/BoltzExchange/hold/releases/download/v${HOLD_VERSION}/hold-linux-amd64.tar.gz" \
+ARG TARGETARCH
+RUN ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "arm64" || echo "amd64") && \
+    curl -fsSL \
+    "https://github.com/BoltzExchange/hold/releases/download/v${HOLD_VERSION}/hold-linux-${ARCH}.tar.gz" \
     | tar -xz -C /tmp/ && \
-    install -m 755 /tmp/build/hold-linux-amd64 /usr/local/bin/hold && \
+    install -m 755 /tmp/build/hold-linux-${ARCH} /usr/local/bin/hold && \
     rm -rf /tmp/build
