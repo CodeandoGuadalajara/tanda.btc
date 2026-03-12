@@ -296,6 +296,89 @@ make test-ln
 
 ---
 
+## Troubleshooting
+
+### Docker no puede conectar a IPs de la LAN
+
+**Síntoma:** desde el host funciona, pero desde un contenedor Docker falla:
+
+```bash
+# Host → OK
+curl http://192.168.100.85:18443/
+
+# Docker → "Failed to connect to server"
+docker run --rm curlimages/curl http://192.168.100.85:18443/
+```
+
+**Causa:** falta IP forwarding y/o regla MASQUERADE en iptables.
+
+**Solución rápida — reiniciar Docker** (a veces recrea sus propias reglas):
+
+```bash
+sudo systemctl restart docker
+docker run --rm curlimages/curl http://192.168.100.85:18443/
+```
+
+**Solución completa:**
+
+```bash
+# 1. Verificar IP forwarding (debe ser 1)
+cat /proc/sys/net/ipv4/ip_forward
+
+# 2. Habilitarlo si es 0
+sudo sysctl -w net.ipv4.ip_forward=1
+
+# 3. Ver la interfaz de red (eth0, wlan0, enp3s0…)
+ip route | grep default
+# Ejemplo: default via 192.168.100.1 dev eth0 ...
+#                                         ^^^^
+
+# 4. Añadir regla MASQUERADE (sustituir eth0 por la interfaz real)
+sudo iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+
+# 5. Verificar
+docker run --rm curlimages/curl http://192.168.100.85:18443/
+# Una respuesta HTTP (aunque sea 401) confirma conectividad
+```
+
+**Hacer los cambios permanentes** (sobreviven al reinicio):
+
+```bash
+sudo apt-get install -y iptables-persistent
+sudo netfilter-persistent save
+echo 'net.ipv4.ip_forward=1' | sudo tee -a /etc/sysctl.conf
+```
+
+---
+
+### CLN participante no arranca (timeout bitcoind)
+
+Verificar que `BITCOIND_HOST` apunta a la IP correcta del PC-Coord y que el puerto 18443 es accesible:
+
+```bash
+curl http://<IP-coord>:18443/
+# Debe responder (aunque sea 401)
+```
+
+Si el firewall bloquea, abrir el puerto:
+
+```bash
+sudo ufw allow from 192.168.0.0/16 to any port 18443
+```
+
+---
+
+### Puerto 9735 ya ocupado en la misma máquina que el coordinador
+
+Si P0 corre en la misma PC que el coordinador, el puerto 9735 ya está en uso por `cln-coordinator`. Usar un puerto distinto:
+
+```bash
+CLN_P2P_PORT=9736 BITCOIND_HOST=<IP-coord> \
+  docker compose -f deploy/participant.yml up --build -d
+```
+
+---
+
 ## Notas de seguridad
 
 - `bitcoin-docker.conf` tiene `rpcallowip=0.0.0.0/0` para simplificar el demo.
