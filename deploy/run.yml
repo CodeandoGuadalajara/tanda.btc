@@ -15,7 +15,7 @@
 #   N_PARTICIPANTS      — número de participantes
 #   P{i}_URL            — URL de la API del participante i  (http://IP:8080)
 #   P{i}_CLN_HOST       — hostname o IP del nodo CLN del participante i
-#   P{i}_CLN_P2P_PORT   — puerto P2P del nodo CLN del participante i  (default 9735)
+#   P{i}_CLN_P2P_PORT   — puerto P2P del nodo CLN del participante i  (default 9736+i)
 #
 # Variables opcionales:
 #   CONTRIBUTION_SATS   — aportación en sats  (default 10000)
@@ -38,25 +38,25 @@ services:
       INTERACTIVE:         ${INTERACTIVE:-0}
       ROUND:               ${ROUND:-}
 
-      P0_URL:           ${P0_URL:-http://127.0.0.1:8080}
-      P0_CLN_HOST:      ${P0_CLN_HOST:-127.0.0.1}
-      P0_CLN_P2P_PORT:  ${P0_CLN_P2P_PORT:-9735}
+      P0_URL:           ${P0_URL:-http://host.docker.internal:8080}
+      P0_CLN_HOST:      ${P0_CLN_HOST:-host.docker.internal}
+      P0_CLN_P2P_PORT:  ${P0_CLN_P2P_PORT:-9736}
 
-      P1_URL:           ${P1_URL:-http://127.0.0.1:8081}
-      P1_CLN_HOST:      ${P1_CLN_HOST:-127.0.0.1}
-      P1_CLN_P2P_PORT:  ${P1_CLN_P2P_PORT:-9735}
+      P1_URL:           ${P1_URL:-http://host.docker.internal:8081}
+      P1_CLN_HOST:      ${P1_CLN_HOST:-host.docker.internal}
+      P1_CLN_P2P_PORT:  ${P1_CLN_P2P_PORT:-9737}
 
-      P2_URL:           ${P2_URL:-http://127.0.0.1:8082}
-      P2_CLN_HOST:      ${P2_CLN_HOST:-127.0.0.1}
-      P2_CLN_P2P_PORT:  ${P2_CLN_P2P_PORT:-9735}
+      P2_URL:           ${P2_URL:-http://host.docker.internal:8082}
+      P2_CLN_HOST:      ${P2_CLN_HOST:-host.docker.internal}
+      P2_CLN_P2P_PORT:  ${P2_CLN_P2P_PORT:-9738}
 
       P3_URL:           ${P3_URL:-}
       P3_CLN_HOST:      ${P3_CLN_HOST:-}
-      P3_CLN_P2P_PORT:  ${P3_CLN_P2P_PORT:-9735}
+      P3_CLN_P2P_PORT:  ${P3_CLN_P2P_PORT:-}
 
       P4_URL:           ${P4_URL:-}
       P4_CLN_HOST:      ${P4_CLN_HOST:-}
-      P4_CLN_P2P_PORT:  ${P4_CLN_P2P_PORT:-9735}
+      P4_CLN_P2P_PORT:  ${P4_CLN_P2P_PORT:-}
 
     volumes:
       - cln-coordinator-data-coord:/cln/coordinator

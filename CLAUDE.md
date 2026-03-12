@@ -42,7 +42,16 @@ bitcoin-cli -regtest stop
 
 Bitcoin Core is compiled **without wallet support**. Mining uses `getblocktemplate + bitcoin-util grind + submitblock`. UTXO discovery uses `scantxoutset`.
 
+## Key dependencies
+
+- **embit** — Bitcoin primitives (Script, Transaction, Taproot)
+- **coincurve** — secp256k1 EC operations (used by musig2.py)
+- **pyln-client** — Core Lightning RPC (used by lnrpc.py)
+- **FastAPI / uvicorn** — participant HTTP API
+
 ## Architecture
+
+The protocol has two layers: an **on-chain layer** (Taproot + MuSig2) and an optional **Lightning Network layer** (CLN + hold invoices). The LN layer uses hold invoices so the coordinator never has unilateral access: participants pay hold invoices → coordinator verifies all N HTLCs accepted → pays winner via regular invoice → settles hold invoices. If the coordinator disappears, hold invoice HTLCs time out and refund automatically.
 
 ```
 tanda/
@@ -53,7 +62,8 @@ tanda/
   participant.py        — Participant actions (contribute, nonce gen, sign_claim, HTLC claim, refund)
   rpc.py                — Bitcoin Core JSON-RPC wrapper (wallet-less + wallet paths)
   lnrpc.py              — CLN RPC wrapper over pyln-client unix socket
-  api_participant_ln.py — FastAPI participant server (CLN_RPC_PATH env var, hold invoice endpoints)
+  api_participant.py    — FastAPI participant server (on-chain, env: SK_IDX, SK_SEED, BITCOIND_RPC_URL)
+  api_participant_ln.py — FastAPI participant server (LN, env: CLN_RPC_PATH, hold invoice endpoints)
   ledger.py             — Per-participant debt/pot ledger with JSON persistence
 
 tests/
