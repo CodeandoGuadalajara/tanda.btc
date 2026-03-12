@@ -1,17 +1,16 @@
 # PC participante: CLN node + API FastAPI
 #
-# Uso — un participante por PC:
-#   BITCOIND_HOST=192.168.1.10 docker compose -f deploy/participant.yml up --build -d
+# Uso directo (N=índice del participante, 0-based):
+#   CLN_P2P_PORT=$((9735+N)) API_PORT=$((8080+N)) \
+#     docker compose -p tanda-pN -f deploy/participant.yml up --build -d
 #
-# Uso — dos participantes en la misma PC (project name distinto por instancia):
-#   BITCOIND_HOST=192.168.1.10 CLN_P2P_PORT=9735 API_PORT=8080 \
-#     docker compose -p tanda-p0 -f deploy/participant.yml up --build -d
+# O con make (más cómodo):
+#   BITCOIND_HOST=192.168.1.10 make participant        # N=0
+#   BITCOIND_HOST=192.168.1.10 N=1 make participant    # N=1
+#   BITCOIND_HOST=192.168.1.10 N=2 make participant    # N=2
 #
-#   BITCOIND_HOST=192.168.1.10 CLN_P2P_PORT=9736 API_PORT=8081 \
-#     docker compose -p tanda-p1 -f deploy/participant.yml up --build -d
-#
-# El flag -p crea volúmenes y redes con prefijo distinto (tanda-p0_*, tanda-p1_*),
-# evitando colisión entre instancias en la misma máquina.
+# El flag -p asigna un project name único por instancia (tanda-p0, tanda-p1, …),
+# lo que crea volúmenes y redes aislados (tanda-p0_*, tanda-p1_*, …).
 #
 # Variables de entorno:
 #   BITCOIND_HOST  — IP del PC-Coord donde corre bitcoind  (default: 192.168.1.10)
