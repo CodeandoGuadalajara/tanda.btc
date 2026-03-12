@@ -34,6 +34,7 @@ services:
       CLN_COORDINATOR_RPC: ${CLN_COORDINATOR_RPC:-/cln/coordinator/regtest/lightning-rpc}
       N_PARTICIPANTS:      ${N_PARTICIPANTS:-3}
       CONTRIBUTION_SATS:   ${CONTRIBUTION_SATS:-10000}
+      N_CYCLES:            ${N_CYCLES:-1}
       INTERACTIVE:         ${INTERACTIVE:-0}
       ROUND:               ${ROUND:-}
 

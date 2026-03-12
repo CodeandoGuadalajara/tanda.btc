@@ -216,6 +216,7 @@ services:
       P1_CLN_P2P_PORT: "9735"
       P2_CLN_P2P_PORT: "9735"
       CONTRIBUTION_SATS: "10000"
+      N_CYCLES: "${N_CYCLES:-1}"
     volumes:
       - cln-coordinator-data-test:/cln/coordinator
       - cln-p0-data-test:/cln/p0

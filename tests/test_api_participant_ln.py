@@ -167,3 +167,46 @@ class TestCreateInvoice:
 
         tc.post("/create_invoice", json={"amount_msat": 5_000, "label": "my-label"})
         mock_cln.invoice.assert_called_once_with(5_000, "my-label", "my-label")
+
+
+# ── POST /renew ─────────────────────────────────────────────────────────────────
+
+COORDINATOR_ID = "03" + "cd" * 32
+ZBASE          = "rbxyz" * 10
+
+
+class TestRenew:
+    def _body(self, cycle=2, sats=10_000, coordinator_id=COORDINATOR_ID):
+        return {"cycle": cycle, "contribution_sats": sats, "coordinator_id": coordinator_id}
+
+    def test_returns_accept_and_zbase(self, client):
+        tc, mock_cln = client
+        mock_cln.sign_message.return_value = ZBASE
+
+        r = tc.post("/renew", json=self._body())
+        assert r.status_code == 200
+        data = r.json()
+        assert data["accept"] is True
+        assert data["cycle"] == 2
+        assert data["zbase"] == ZBASE
+
+    def test_signs_canonical_message(self, client):
+        tc, mock_cln = client
+        mock_cln.sign_message.return_value = ZBASE
+
+        tc.post("/renew", json=self._body(cycle=3, sats=5_000, coordinator_id=COORDINATOR_ID))
+        expected = f"tanda-renew:cycle=3:sats=5000:coordinator={COORDINATOR_ID}"
+        mock_cln.sign_message.assert_called_once_with(expected)
+
+    def test_sign_message_error_returns_500(self, client):
+        tc, mock_cln = client
+        mock_cln.sign_message.side_effect = Exception("hsm not available")
+
+        r = tc.post("/renew", json=self._body())
+        assert r.status_code == 500
+        assert "sign_message failed" in r.json()["detail"]
+
+    def test_missing_coordinator_id_returns_422(self, client):
+        tc, mock_cln = client
+        r = tc.post("/renew", json={"cycle": 1, "contribution_sats": 10_000})
+        assert r.status_code == 422

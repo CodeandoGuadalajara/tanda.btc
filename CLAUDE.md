@@ -82,12 +82,15 @@ deploy/
 Modules only import downward — never create circular imports:
 
 ```
-rpc.py          ← no tanda imports
-htlc.py         ← no tanda imports
-musig2.py       ← no tanda imports
-protocol.py     ← imports musig2
-coordinator.py  ← imports protocol, musig2, htlc, rpc
-participant.py  ← imports protocol, musig2, htlc, rpc
+rpc.py                ← no tanda imports
+htlc.py               ← no tanda imports
+musig2.py             ← no tanda imports
+lnrpc.py              ← no tanda imports
+ledger.py             ← no tanda imports
+protocol.py           ← imports musig2
+coordinator.py        ← imports protocol, musig2, htlc, rpc
+participant.py        ← imports protocol, musig2, htlc, rpc
+api_participant_ln.py ← imports lnrpc, ledger
 ```
 
 ### Taproot output structure (per round)

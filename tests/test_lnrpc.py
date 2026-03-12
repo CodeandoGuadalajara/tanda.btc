@@ -290,3 +290,48 @@ class TestWaitInvoice:
         result = cln.wait_invoice("lbl")
         rpc.waitinvoice.assert_called_once_with("lbl")
         assert result["status"] == "paid"
+
+
+# ── Message signing ─────────────────────────────────────────────────────────────
+
+NODE_ID = "02" + "ab" * 32
+ZBASE   = "rbxyz" * 10   # fake zbase32 signature
+
+
+class TestSignMessage:
+    def test_returns_zbase(self, mock_rpc):
+        cln, rpc = mock_rpc
+        rpc.call.return_value = {"zbase": ZBASE, "message": "hello"}
+        result = cln.sign_message("hello")
+        rpc.call.assert_called_once_with("signmessage", {"message": "hello"})
+        assert result == ZBASE
+
+    def test_passes_full_message(self, mock_rpc):
+        cln, rpc = mock_rpc
+        msg = "tanda-renew:cycle=2:sats=10000:coordinator=03abc"
+        rpc.call.return_value = {"zbase": ZBASE}
+        cln.sign_message(msg)
+        rpc.call.assert_called_once_with("signmessage", {"message": msg})
+
+
+class TestCheckMessage:
+    def test_returns_true_when_verified_and_pubkey_matches(self, mock_rpc):
+        cln, rpc = mock_rpc
+        rpc.call.return_value = {"verified": True, "pubkey": NODE_ID}
+        assert cln.check_message("hello", ZBASE, NODE_ID) is True
+        rpc.call.assert_called_once_with("checkmessage", {"message": "hello", "zbase": ZBASE})
+
+    def test_returns_false_when_not_verified(self, mock_rpc):
+        cln, rpc = mock_rpc
+        rpc.call.return_value = {"verified": False, "pubkey": NODE_ID}
+        assert cln.check_message("hello", ZBASE, NODE_ID) is False
+
+    def test_returns_false_when_pubkey_mismatch(self, mock_rpc):
+        cln, rpc = mock_rpc
+        rpc.call.return_value = {"verified": True, "pubkey": "03" + "ff" * 32}
+        assert cln.check_message("hello", ZBASE, NODE_ID) is False
+
+    def test_returns_false_when_verified_missing(self, mock_rpc):
+        cln, rpc = mock_rpc
+        rpc.call.return_value = {"pubkey": NODE_ID}
+        assert cln.check_message("hello", ZBASE, NODE_ID) is False

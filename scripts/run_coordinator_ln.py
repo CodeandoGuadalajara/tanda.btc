@@ -48,6 +48,7 @@ from tanda.lnrpc import CLNRpc
 # ── Configuration ──────────────────────────────────────────────────────────────
 
 N = int(os.environ.get("N_PARTICIPANTS", "3"))
+N_CYCLES = int(os.environ.get("N_CYCLES", "1"))
 CONTRIBUTION_SATS = int(os.environ.get("CONTRIBUTION_SATS", "10000"))
 BITCOIND_URL = os.environ.get("BITCOIND_RPC_URL", "http://user:password@127.0.0.1:18443")
 
@@ -391,6 +392,58 @@ def run_round_ln(
     )
 
 
+# ── Renewal ────────────────────────────────────────────────────────────────────
+
+def collect_renewals(
+    cycle: int,
+    p_urls: list[str],
+    contribution_sats: int,
+    cln_coord: CLNRpc,
+) -> bool:
+    """
+    Propose a new cycle to all participants and verify each acceptance
+    cryptographically via CLN signmessage/checkmessage.
+
+    Canonical message: tanda-renew:cycle={N}:sats={S}:coordinator={node_id}
+    Both sides construct this message independently from the request fields.
+    Returns True only if every participant accepts and their signature verifies.
+    Winner order is fixed (participant k always wins round k).
+    """
+    coordinator_id = cln_coord.get_info()["id"]
+    message = f"tanda-renew:cycle={cycle}:sats={contribution_sats}:coordinator={coordinator_id}"
+    print(f"\n--- Renewal: proposing cycle {cycle} ---", flush=True)
+    print(f"  message: {message}", flush=True)
+
+    for i, url in enumerate(p_urls):
+        # Get participant node_id for signature verification
+        p_node_id = get_participant_node_id(url, CLN_P_RPCS[i])
+
+        r = httpx.post(
+            f"{url}/renew",
+            json={
+                "cycle": cycle,
+                "contribution_sats": contribution_sats,
+                "coordinator_id": coordinator_id,
+            },
+            timeout=30,
+        )
+        r.raise_for_status()
+        data = r.json()
+
+        if not data.get("accept", False):
+            print(f"  P{i} declined cycle {cycle}", flush=True)
+            return False
+
+        zbase = data.get("zbase", "")
+        if not cln_coord.check_message(message, zbase, p_node_id):
+            print(f"  P{i} signature verification FAILED", flush=True)
+            return False
+
+        print(f"  P{i} accepted and signed cycle {cycle} (zbase={zbase[:16]}...)", flush=True)
+
+    return True
+
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def print_balances(p_urls: list[str]) -> None:
@@ -438,16 +491,28 @@ def main() -> None:
         print_balances(P_URLS)
         _wait_for_enter("\n▶ Bootstrap completo. Presiona Enter para iniciar la Ronda 0… ")
 
-    for k in range(N):
-        winner_idx = k
-        print(f"\n=== Round {k}: P{winner_idx} wins ===", flush=True)
-        run_round_ln(k, winner_idx, cln_coord, P_URLS, CONTRIBUTION_SATS)
-        print_balances(P_URLS)
+    for cycle in range(N_CYCLES):
+        if cycle > 0:
+            if not collect_renewals(cycle, P_URLS, CONTRIBUTION_SATS, cln_coord):
+                print(f"\n✗ Cycle {cycle} rejected by one or more participants. Stopping.", flush=True)
+                break
+            if INTERACTIVE:
+                _wait_for_enter(f"\n▶ Ciclo {cycle} confirmado. Presiona Enter para iniciar… ")
 
-        if INTERACTIVE and k < N - 1:
-            _wait_for_enter(f"\n▶ Ronda {k} completa. Presiona Enter para la Ronda {k + 1}… ")
+        print(f"\n{'=' * 10} Cycle {cycle} {'=' * 10}", flush=True)
+        for k in range(N):
+            winner_idx = k
+            round_label = f"cycle={cycle} round={k}"
+            print(f"\n=== {round_label}: P{winner_idx} wins ===", flush=True)
+            run_round_ln(cycle * N + k, winner_idx, cln_coord, P_URLS, CONTRIBUTION_SATS)
+            print_balances(P_URLS)
 
-    print(f"\n✓ All {N} LN rounds complete.", flush=True)
+            if INTERACTIVE and k < N - 1:
+                _wait_for_enter(f"\n▶ Ronda {k} completa. Presiona Enter para la Ronda {k + 1}… ")
+
+        print(f"\n✓ Cycle {cycle} complete ({N} rounds).", flush=True)
+
+    print(f"\n✓ All {N_CYCLES} cycle(s) complete.", flush=True)
 
 
 if __name__ == "__main__":

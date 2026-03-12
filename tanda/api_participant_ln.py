@@ -41,6 +41,12 @@ class CreateInvoiceRequest(BaseModel):
     label: str
 
 
+class RenewRequest(BaseModel):
+    cycle: int
+    contribution_sats: int
+    coordinator_id: str  # coordinator node_id; included in the signed message
+
+
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
 @app.get("/health")
@@ -85,3 +91,20 @@ def create_invoice(req: CreateInvoiceRequest):
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"invoice creation failed: {exc}")
     return {"bolt11": result["bolt11"]}
+
+
+@app.post("/renew")
+def renew(req: RenewRequest):
+    """
+    Coordinator proposes a new tanda cycle. Participant signs the terms with
+    its node key so the coordinator can verify acceptance cryptographically.
+
+    Canonical message: tanda-renew:cycle={N}:sats={S}:coordinator={node_id}
+    Both sides construct this message independently from the request fields.
+    """
+    message = f"tanda-renew:cycle={req.cycle}:sats={req.contribution_sats}:coordinator={req.coordinator_id}"
+    try:
+        zbase = app.state.cln.sign_message(message)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"sign_message failed: {exc}")
+    return {"accept": True, "cycle": req.cycle, "zbase": zbase}

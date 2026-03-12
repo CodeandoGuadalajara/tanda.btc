@@ -159,10 +159,14 @@ Minimal. `generate_htlc_secret()` → `(preimage, sha256(preimage))`. `verify_pr
 - `pay(bolt11)` → pays a BOLT11 invoice
 - `connect(node_id, host, port)` → opens P2P connection
 - `fundchannel(node_id, amount_sat, push_msat)` → opens channel with optional push
+- `sign_message(message)` → zbase32 signature with node's private key
+- `check_message(message, zbase, node_id)` → bool; True only if verified AND pubkey matches node_id
 
 **Hold invoice states:** `UNPAID → ACCEPTED → PAID / CANCELLED`
 
 **HTLC detection:** poll `listpeerchannels().channels[*].htlcs` where `direction == "in"` and `payment_hash` matches.
+
+**Renewal signing message format:** `tanda-renew:cycle={N}:sats={S}:coordinator={node_id}` — both sides construct this independently from the request fields.
 
 ---
 
@@ -175,6 +179,7 @@ FastAPI participant server. Reads `CLN_RPC_PATH` env var on startup.
 - `GET /node_info` → `{"id":"03...","address":{"type":"ipv4",...}}`
 - `POST /pay_invoice` `{"bolt11":"lnbcrt..."}` → `{"payment_hash":"hex"}` — participant pays coordinator's hold invoice (blocks until settled/cancelled by coordinator)
 - `POST /create_invoice` `{"amount_msat":N,"label":"str"}` → `{"bolt11":"lnbcrt..."}` — winner creates regular invoice so coordinator can pay the pot
+- `POST /renew` `{"cycle":N,"contribution_sats":S,"coordinator_id":"03..."}` → `{"accept":true,"cycle":N,"zbase":"..."}` — participant signs renewal terms with node key; coordinator verifies with `check_message`
 
 **Lifespan:** CLNRpc instance created once at startup; shared across requests via `app.state.cln`.
 

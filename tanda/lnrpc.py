@@ -127,3 +127,21 @@ class CLNRpc:
     def wait_invoice(self, label: str) -> dict:
         """Block until the invoice with this label is paid."""
         return self._rpc.waitinvoice(label)
+
+    # ── Message signing ────────────────────────────────────────────────────────
+
+    def sign_message(self, message: str) -> str:
+        """
+        Sign a UTF-8 message with this node's private key.
+        Returns a zbase32-encoded signature.
+        CLN prepends "lightning:" internally before hashing — checkmessage handles this.
+        """
+        return self._rpc.call("signmessage", {"message": message})["zbase"]
+
+    def check_message(self, message: str, zbase: str, node_id: str) -> bool:
+        """
+        Verify a zbase32 signature produced by signmessage.
+        Returns True if the signature is valid and was produced by node_id.
+        """
+        result = self._rpc.call("checkmessage", {"message": message, "zbase": zbase})
+        return result.get("verified", False) and result.get("pubkey") == node_id

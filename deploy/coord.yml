@@ -6,6 +6,8 @@
 # Este compose corre SOLO en la máquina del coordinador.
 # Los participantes usan deploy/participant.yml en sus propias PCs.
 
+name: tanda-btc
+
 networks:
   tanda-coord-net:
     driver: bridge
